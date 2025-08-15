@@ -1,0 +1,256 @@
+\documentclass[aspectratio=169]{beamer}
+
+% ====== CONFIG ======
+\usetheme{metropolis}
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{emoji}
+\usetikzlibrary{arrows.meta, positioning, shapes.misc, shapes.symbols, shapes.geometric}
+\usepackage{pgfplotstable}
+\pgfplotsset{compat=1.18}
+
+\newcommand{\DATAPATH}{../code/outputs/}
+\makeatletter
+\IfFileExists{../code/outputs/tfidf_sample_sparse.csv}{\renewcommand{\DATAPATH}{../code/outputs/}}{}
+\IfFileExists{code/outputs/tfidf_sample_sparse.csv}{\renewcommand{\DATAPATH}{code/outputs/}}{}
+\IfFileExists{../../code/outputs/tfidf_sample_sparse.csv}{\renewcommand{\DATAPATH}{../../code/outputs/}}{}
+\makeatother
+
+\title{Text Normalization and TF\textendash IDF on a Real Dataset}
+\subtitle{\texttt{twitter\_f1} (Hugging Face)}
+\author{Enrique Ulises Báez Gómez Tagle}
+\date{\today}
+
+\begin{document}
+
+% ====== TITLE ======
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ====== TASK ======
+\begin{frame}{Assignment}
+\small
+\begin{itemize}
+  \item Choose a real text dataset (paper or open-source repository: \textbf{Kaggle}, UCI, HuggingFace).
+  \item Present the dataset:
+    \begin{enumerate}
+      \item \textbf{Source}: cite paper or repository.
+      \item \textbf{Domain \& Topic}.
+      \item \textbf{Collection Method} (if provided by the source).
+      \item \textbf{Purpose}: what NLP tasks it enables.
+    \end{enumerate}
+  \item Apply normalization: lowercasing, expand contractions, remove punctuation \& stopwords, stemming/\textbf{lemmatization}.
+  \item Vectorize with \textbf{TF\textendash IDF}; show \textbf{vocabulary size} and \textbf{sample vectors}.
+  \item Prepare the pipeline: \textbf{dataset → normalization → TF\textendash IDF → observations}.
+\end{itemize}
+\end{frame}
+
+% ====== DATASET OVERVIEW ======
+\begin{frame}{Dataset: \texttt{twitter\_f1}}
+\small
+\textbf{Source (citation)}:\\
+\begin{itemize}
+  \item Hugging Face Datasets: \textbf{Malekith/twitter\_f1}. Available at
+  \url{https://huggingface.co/datasets/Malekith/twitter_f1} (accessed \today).
+\end{itemize}
+
+\medskip
+\textbf{Domain \& Topic}:\\
+Public tweets about Formula 1 (teams, drivers, qualifying, races, results, support/celebration messages).
+
+\medskip
+\textbf{Collection Method} (not specified in the dataset card):
+\begin{quote}
+Based on the title and tags, this appears to consist of Twitter/X posts related to Formula 1, but no explicit collection details are provided in the dataset card.
+\end{quote}
+\textbf{Languages}: English mixed with other languages in the text.\\
+\textbf{License}: not specified in the dataset card.
+\end{frame}
+
+\begin{frame}{Possible NLP Uses}
+\small
+\begin{itemize}
+  \item Sentiment analysis, keywording.
+  \item Information retrieval/search, clustering.
+  \item Event/entity-focused analysis in sports media.
+\end{itemize}
+\end{frame}
+
+% ====== PIPELINE DIAGRAM ======
+\begin{frame}{Workflow Overview}
+    \centering
+    \small
+    \begin{tikzpicture}[
+      node distance=8mm and 10mm,
+      box/.style={
+        rectangle,
+        rounded corners=2mm,
+        draw,
+        align=center,
+        minimum width=3.2cm,
+        minimum height=1.0cm,
+        text depth=0pt
+      },
+      >=Stealth
+    ]
+    % Nodes placement
+    \node[box] (data) {Dataset\\(\texttt{twitter\_f1})};
+    \node[box, right=of data] (norm) {Normalization\\\footnotesize lowercasing, contractions\\ keep hashtags (split), keep digits\\ URLs/@ removal; emoji $\to$ EMO\_POS/NEG\\ multilingual stopwords; EN lemmatization};
+    \node[box, below=of norm] (tfidf) {TF\textendash IDF\\\footnotesize n-grams (1,2)\\ min\_df=5, max\_df=0.95\\ lowercase=False; keep accents};
+    \node[box, right=of tfidf] (obs) {Observations\\};
+    
+    % Arrows
+    \draw[->] (data.east) -- (norm.west);
+    \draw[->] (norm.south) -- (tfidf.north);
+    \draw[->] (tfidf.east) -- (obs.west);
+    \end{tikzpicture}
+    \end{frame}
+
+% ====== NORMALIZATION DETAILS ======
+\begin{frame}{Normalization Steps Implemented}
+\small
+\begin{itemize}
+  \item \textbf{Lowercasing}: convert all text to lowercase.
+  \item \textbf{Contractions expansion}: e.g., \texttt{it's \textrightarrow{} it is}.
+  \item \textbf{URLs \& @mentions}: removed; \textbf{hashtags preserved} (strip \#, split CamelCase; special-case \texttt{GP} as \texttt{gp}).
+  \item \textbf{Emoji tokens}: mapped to sentiment tokens (\texttt{EMOPOS}/\texttt{EMONEG}).
+  \item \textbf{Keep alphanumerics}: preserve domain tokens like \texttt{f1}, \texttt{p1/p2}, \texttt{q3}; drop pure punctuation.
+  \item \textbf{Stopwords}: multilingual set (EN + ES/IT/FR) + \texttt{\{amp, rt\}}.
+  \item \textbf{Lemmatization}: spaCy English \textit{only for EN} texts; non-EN texts skip lemmatization (cleaned tokens kept).
+\end{itemize}
+\end{frame}
+
+% ====== TF-IDF CONFIG ======
+\begin{frame}{Vectorization (TF\textendash IDF)}
+\small
+\begin{itemize}
+  \item \textbf{Vectorizer}: \texttt{TfidfVectorizer(ngram\_range=(1,2), min\_df=5, max\_df=0.95, lowercase=False, strip\_accents=None)}.
+  \item \textbf{Matrix shape}: \texttt{(n\_docs, vocab\_size)}.
+  \item \textbf{Results}:
+    \begin{itemize}
+      \item \texttt{TF-IDF matrix shape}: \texttt{(4538, 2533)}.
+      \item \texttt{Vocabulary size}: \texttt{2533}.
+    \end{itemize}
+  \item \textbf{Why these parameters}:
+    \begin{itemize}
+      \item \texttt{ngram\_range=(1,2)}: captures key expressions (e.g., \textit{pole position}, \textit{hard work}).
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+% ====== SAMPLES: SPARSE ======
+\begin{frame}{Sample Vectors (sparse view)}
+\small
+From \texttt{\DATAPATH tfidf\_sample\_sparse.csv} (first 10 rows).
+
+\medskip
+\pgfplotstableset{col sep=comma, string type}
+\pgfplotstabletypeset[
+  columns={feature,tfidf,doc_id},
+  columns/feature/.style={string type,column name=feature},
+  columns/tfidf/.style={column name=tf-idf, fixed, fixed zerofill, precision=6},
+  columns/doc_id/.style={column name=doc},
+  every head row/.style={before row=\toprule,after row=\midrule},
+  every last row/.style={after row=\bottomrule},
+  skip rows between index={10}{100000}
+]{\DATAPATH tfidf_sample_sparse.csv}
+\end{frame}
+
+% ====== SAMPLES: DENSE (EXPLAINED) ======
+\begin{frame}{Sample Vectors (dense view)}
+\small
+\begin{itemize}
+  \item A dense slice for the first 5 documents was exported to:
+  \texttt{\DATAPATH tfidf\_sample\_dense\_first5.csv}.
+  \item \textbf{Note}: the matrix is very wide (2533 columns). 
+\end{itemize}
+\end{frame}
+
+% ====== TOP-K TABLE (IN-SLIDE) ======
+\begin{frame}{Top-k TF\textendash IDF terms (k=10)}
+\scriptsize
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Doc 0} & \textbf{Doc 1} & \textbf{Doc 2}\\
+\midrule
+entire team (0.2773) & hand (0.2746) & party (0.3663) \\
+team hard (0.2650) & team clap (0.2632) & popper (0.3663) \\
+lovely (0.2650) & clap hand (0.2473) & old (0.3525) \\
+clapping hand (0.2601) & great work (0.2473) & happy birthday (0.3330) \\
+entire (0.2578) & today great (0.2363) & clapping hand (0.3163) \\
+let push (0.2404) & forward race (0.2341) & birthday (0.3018) \\
+big thank (0.2273) & work team (0.2319) & clapping (0.2519) \\
+yes (0.2216) & ok hand (0.2184) & support (0.2293) \\
+hard work (0.2096) & pole position (0.2156) & big (0.2280) \\
+clapping (0.2071) & clap (0.2065) & year (0.2182) \\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+% ====== TOP TERMS ======
+\begin{frame}{Top Terms per Document (k=10)}
+\small
+
+\footnotesize
+\begin{itemize}
+\item \textbf{Doc 0}: \texttt{entire team, team hard, lovely, clapping hand, entire, let push, big thank, yes, hard work, clapping}
+\item \textbf{Doc 1}: \texttt{hand, team clap, clap hand, great work, today great, forward race, work team, ok hand, pole position, clap}
+\item \textbf{Doc 2}: \texttt{party, popper, old, happy birthday, clapping hand, birthday, clapping, support, big, year}
+\end{itemize}
+\end{frame}
+
+% ====== OBSERVATIONS ======
+\begin{frame}{Observations}
+\small
+\begin{itemize}
+  \item \textbf{Corpus size}: 4{,}538 documents.
+  \item \textbf{Vocabulary (post-normalization)}: 2{,}533 terms (uni/bi-grams).
+  \item \textbf{Themes}: stronger F1 markers retained (e.g., \textit{f1, p1/p2, q3}), GP hashtags (e.g., \textit{bahrain gp}), and emoji-derived tokens (e.g., \textit{clapping hand}).
+  \item \textbf{Multilingual}: EN + ES/IT/FR present.
+  \item \textbf{Utility}: sentiment analysis, keywording, information retrieval, clustering, event analysis.
+\end{itemize}
+\end{frame}
+
+% ====== REPRODUCIBILITY ======
+\begin{frame}{Reproducibility \& Artifacts}
+\small
+\begin{itemize}
+  \item Script: \texttt{normalization\_tf-idf.py}.
+  \item Exported artifacts:
+    \begin{itemize}
+      \item \texttt{\DATAPATH tfidf\_sample\_sparse.csv}
+      \item \texttt{\DATAPATH tfidf\_sample\_dense\_first5.csv}
+      \item \texttt{\DATAPATH vocabulary.csv}
+      \item \texttt{\DATAPATH clean\_texts.csv}
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+% ====== BEFORE/AFTER EXAMPLE ======
+\begin{frame}{Before vs After}
+\small
+\begin{block}{Original tweet}
+  RT @MercedesAMGF1 What a quali! P1 for Lewis at \#BahrainGP [trophy] [car] Let's push tomorrow!! [trophy] [car]
+\end{block}
+\begin{block}{After normalization }
+  \small what quali p1 lewis bahrain gp EMOPOS emopos let push tomorrow EMOPOS
+\end{block}
+\end{frame}
+
+% ====== REFERENCES ======
+\begin{frame}{References}
+\small
+\begin{itemize}
+  \item \textbf{Dataset}: Malekith. \textit{twitter\_f1}. Hugging Face Datasets. \url{https://huggingface.co/datasets/Malekith/twitter_f1} (accessed \today).
+\end{itemize}
+\end{frame}
+
+\end{document}
